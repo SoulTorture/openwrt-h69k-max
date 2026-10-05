@@ -53,7 +53,8 @@ checks = {
     "parallel build": "make -j$(nproc)",
     "artifact upload": "actions/upload-artifact@v4",
     "release": "softprops/action-gh-release@v2",
-    "ccache sym": "CONFIG_CCACHE=y",
+    "feeds update": "./scripts/feeds update -a",
+    "feeds install": "./scripts/feeds install -a",
     "kernel pin": "CONFIG_LINUX_",
 }
 for label, needle in checks.items():

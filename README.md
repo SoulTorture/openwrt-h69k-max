@@ -129,13 +129,11 @@ git push -u origin main
 |---|---|---|
 | `kernel` | `6.18` | rockchip 目标只支持 **6.18（默认）/ 6.12（测试）**；MT7916 建议 6.18 |
 | `rootfs_size_mb` | `4020` | rootfs 分区大小；32GB eMMC 可给到 `8192` |
-| `use_cache` | `true` | ccache 缓存，二次编译快很多 |
 | `make_release` | `true` | 发布到 Release（需 `contents: write`，工作流已声明） |
 
 ### 编译耗时
 
-GitHub runner 4 核，首次全量编译（含 U-Boot、内核、工具链）约 **1.5–4 小时**；
-命中 ccache 后约 40–90 分钟。
+GitHub runner 4 核，首次全量编译（含 U-Boot、内核、工具链）约 **1.5–4 小时**。
 
 > 工作流内置**配置符号校验**：`make defconfig` 之后会逐个检查本工程的
 > `CONFIG_PACKAGE_*` 是否真的生效。包名写错或该源码树没有这个包，会**立刻报错**

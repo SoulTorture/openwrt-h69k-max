@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     把 H69K-MAX 固件编译工程一键推送到 GitHub, 然后在云端 Actions 编译。
 
@@ -134,7 +134,6 @@ tmp/
             gh workflow run "build-h69k-max.yml" `
                 -f "kernel=$Kernel" `
                 -f "rootfs_size_mb=$RootfsMb" `
-                -f "use_cache=true" `
                 -f "make_release=true"
             Write-Ok "已触发。查看进度: gh run watch  或  gh run list"
             Start-Sleep -Seconds 4

@@ -32,11 +32,6 @@ on:
         required: true
         default: '4020'
         type: string
-      use_cache:
-        description: '启用 ccache 缓存 (重编译更快)'
-        required: true
-        default: true
-        type: boolean
       make_release:
         description: '把固件发布到 Release (需要 contents: write)'
         required: true
@@ -99,23 +94,19 @@ jobs:
           echo "LEDE commit: $(git rev-parse HEAD)" | tee ../lede-commit.txt
           git log -1 --format='%H %ci %s' | tee -a ../lede-commit.txt
 
-      - name: ccache 缓存
-        if: ${{ !inputs.use_cache == false }}
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ccache-h69k-${{ github.event.inputs.kernel }}-${{ github.run_id }}
-          restore-keys: |
-            ccache-h69k-${{ github.event.inputs.kernel }}-
-            ccache-h69k-
-
-      - name: 配置加速 (ccache)
-        if: ${{ inputs.use_cache != false }}
+      - name: '更新并安装 Feeds (关键: luci/packages 都来自 feed)'
+        working-directory: openwrt
         run: |
-          echo "CONFIG_CCACHE=y" >> builder/config/h69k-max.config
-          echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
-          ccache --max-size=5G || true
-          ccache -z || true
+          set -e
+          n=0
+          until ./scripts/feeds update -a; do
+            n=$((n+1))
+            if [ "$n" -ge 4 ]; then echo "::error::feeds update 连续失败 4 次"; exit 1; fi
+            echo "feeds update 第 ${n} 次失败, 20 秒后重试..."
+            sleep 20
+          done
+          ./scripts/feeds install -a
+          echo "feeds 安装完成"
 
       - name: 生成 .config (设备 + 5G 模块)
         working-directory: openwrt
