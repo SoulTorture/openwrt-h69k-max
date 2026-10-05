@@ -1,0 +1,9 @@
+﻿# 编译产物与临时文件
+out/
+*.log
+*.img
+*.img.gz
+*.itb
+*.bin
+bin/
+tmp/
