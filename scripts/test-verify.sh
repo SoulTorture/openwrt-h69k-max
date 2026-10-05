@@ -18,12 +18,10 @@ CONFIG_PACKAGE_rkbin-rk3568=y
 CONFIG_PACKAGE_kmod-mt7916-firmware=y
 CONFIG_PACKAGE_kmod-mt7915e=y
 CONFIG_PACKAGE_kmod-hwmon-pwmfan=y
-CONFIG_PACKAGE_kmod-mhi-bus=y
-CONFIG_PACKAGE_kmod-mhi-pci-generic=y
-CONFIG_PACKAGE_kmod-mhi-wwan-ctrl=y
-CONFIG_PACKAGE_kmod-mhi-wwan-mbim=y
+CONFIG_PACKAGE_kmod-pcie_mhi=y
 CONFIG_PACKAGE_kmod-usb-serial-option=y
 CONFIG_PACKAGE_kmod-usb-serial-wwan=y
+CONFIG_PACKAGE_kmod-usb-serial-qualcomm=y
 CONFIG_PACKAGE_kmod-usb-acm=y
 CONFIG_PACKAGE_kmod-usb-net=y
 CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y
@@ -38,15 +36,14 @@ CONFIG_PACKAGE_umbim=y
 CONFIG_PACKAGE_luci-proto-qmi=y
 CONFIG_PACKAGE_luci-proto-mbim=y
 CONFIG_PACKAGE_luci-proto-ncm=y
-CONFIG_PACKAGE_luci-app-modeminfo=y
 CONFIG_PACKAGE_luci-app-modemband=y
+CONFIG_PACKAGE_modemband=y
 CONFIG_PACKAGE_luci-app-3ginfo-lite=y
-CONFIG_PACKAGE_luci-app-atinout=y
-CONFIG_PACKAGE_atinout=y
 CONFIG_PACKAGE_sms-tool=y
+CONFIG_PACKAGE_luci-app-sms-tool-js=y
 CONFIG_PACKAGE_picocom=y
-CONFIG_PACKAGE_usb-modeswitch=y
 # NOTE: CONFIG_PACKAGE_kmod-mt76-connac intentionally absent to test WARNING path
+# NOTE: CONFIG_PACKAGE_luci-app-fancontrol intentionally absent (not in LEDE feeds)
 EOF
 
 cp /tmp/.config.stub /tmp/.config

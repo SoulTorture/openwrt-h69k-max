@@ -22,11 +22,11 @@ on:
         default: 'master'
         type: string
       kernel:
-        description: '内核版本'
+        description: '内核版本 (rockchip 目标仅支持 6.18 / 6.12)'
         required: true
         default: '6.18'
         type: choice
-        options: ['6.18', '6.12', '6.6']
+        options: ['6.18', '6.12']
       rootfs_size_mb:
         description: 'rootfs 分区大小 (MB, eMMC 32GB 可给 8192)'
         required: true
@@ -71,19 +71,23 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
           sudo -E apt-get -qq update
+          # 核心依赖 (LEDE/OpenWrt 官方 buildbot 清单)
           sudo -E apt-get -qq install -y --no-install-recommends \
-            ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison \
-            build-essential bzip2 ccache cmake cpio curl device-tree-compiler \
-            fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged \
-            help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev \
-            libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
-            libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz \
-            mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 \
-            python3-pip python3-ply python3-docutils python3-pkg-resources qemu-utils \
+            autoconf automake autopoint binutils bison build-essential bzip2 \
+            ccache cmake cpio curl device-tree-compiler fastjar flex gawk \
+            gettext gcc-multilib g++-multilib git gperf haveged help2man \
+            intltool libc6-dev-i386 libelf-dev libglib2.0-dev libltdl-dev \
+            libmpc-dev libmpfr-dev libncurses-dev libreadline-dev libssl-dev \
+            libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
+            ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip \
+            python3-ply python3-docutils python3-pkg-resources qemu-utils \
             re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
             unzip vim wget xmlto xxd zlib1g-dev zstd
-          sudo -E apt-get -qq autoremove --purge -y
-          sudo -E apt-get -qq clean
+          # 非关键/可能改名者, 失败不阻断
+          sudo -E apt-get -qq install -y --no-install-recommends \
+            ack antlr3 aria2 asciidoc lib32gcc-s1 libgmp3-dev libpython3-dev || true
+          sudo -E apt-get -qq autoremove --purge -y || true
+          sudo -E apt-get -qq clean || true
           df -hT
 
       - name: 克隆 LEDE 源码
@@ -109,6 +113,7 @@ jobs:
         if: ${{ inputs.use_cache != false }}
         run: |
           echo "CONFIG_CCACHE=y" >> builder/config/h69k-max.config
+          echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
           ccache --max-size=5G || true
           ccache -z || true
 
@@ -179,14 +184,27 @@ jobs:
         working-directory: openwrt
         run: |
           set -e
+          df -hT
           make download -j$(nproc) || make download -j1 V=s
+
+      - name: 编译前磁盘检查
+        working-directory: openwrt
+        run: |
+          free_kb=$(df -k --output=avail . | tail -n1 | tr -d ' ')
+          echo "可用空间: $((free_kb/1024/1024)) GB"
+          if [ "$free_kb" -lt 8388608 ]; then
+            echo "::warning::可用空间不足 8GB, 编译可能失败; 尝试进一步清理"
+            sudo rm -rf /usr/share/swift /usr/local/lib/node_modules /opt/pipx 2>/dev/null || true
+          fi
 
       - name: 编译固件 (make -j)
         working-directory: openwrt
         run: |
           set -o pipefail
           make -j$(nproc) 2>&1 | tee build.log
-          echo "编译结束, 退出码: $?"
+          rc=${PIPESTATUS[0]}
+          echo "编译结束, make 退出码: ${rc}"
+          exit "${rc}"
 
       - name: 收集固件
         run: |
@@ -206,7 +224,7 @@ jobs:
       - name: 上传固件 (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: openwrt-h69k-max-${{ github.run_number }}
+          name: openwrt-h69k-max-${{ github.run_id }}
           path: out/*
           if-no-files-found: error
           compression-level: 0
@@ -215,7 +233,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log-${{ github.run_number }}
+          name: build-log-${{ github.run_id }}
           path: |
             openwrt/build.log
             openwrt/.config
@@ -225,7 +243,7 @@ jobs:
         if: ${{ inputs.make_release != false }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: h69k-max-${{ github.run_number }}
+          tag_name: h69k-max-${{ github.run_id }}
           name: OpenWrt H69K-MAX (kernel ${{ github.event.inputs.kernel }}) #${{ github.run_number }}
           body: |
             HINLINK H69K-MAX (RK3568) OpenWrt 固件
