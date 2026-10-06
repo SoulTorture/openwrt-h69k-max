@@ -110,7 +110,11 @@ jobs:
           chk "luci lua 库存在" test -d "$ROOT/usr/lib/lua/luci"
           chk "lua 解释器存在" test -n "$(ls "$ROOT"/usr/bin/lua* 2>/dev/null)"
           chk "luci-proto-qmi 存在" test -e "$ROOT/usr/lib/lua/luci/model/cbi/admin_network/proto_qmi.lua" -o -d "$ROOT/usr/lib/lua/luci/proto/qmi" -o -d "$ROOT/lib/netifd/proto"
-          chk "中文翻译存在" test -n "$(find "$ROOT/usr/lib/lua/luci/i18n" -name '*zh*.lua' 2>/dev/null | head -1)"
+          echo "--- i18n 目录实际内容 (前 10 项) ---"
+          find "$ROOT/usr/lib/lua/luci/i18n" -maxdepth 1 -type f 2>/dev/null | sed 's|.*/||' | sort | head -10
+          echo "--- 全盘 zh 语言文件 (前 5 项) ---"
+          find "$ROOT" -name '*zh*' -path '*luci*' 2>/dev/null | sed "s|$ROOT||" | head -5
+          chk "luci 翻译文件 (.lmo)" test -n "$(find "$ROOT/usr/lib/lua/luci/i18n" -name '*.lmo' 2>/dev/null | head -1)"
 
           echo "===== 3. 关键内核模块 (rootfs 内, 按真实模块文件名) ====="
           KVER=$(ls "$ROOT/lib/modules" | head -1)
