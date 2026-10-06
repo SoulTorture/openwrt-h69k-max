@@ -39,11 +39,11 @@ H69K 的设备定义目前**只存在于 `coolsnowwolf/lede`（Lean 分支）**�
 
 | 源码树 | H69K 支持 | 设备名 | 说明 |
 |---|---|---|---|
-| **`coolsnowwolf/lede` (master)** | ✅ 原生 | `hinlink_opc-h69k` | 本工程使用 |
+| **`coolsnowwolf/lede`** | ✅ 原生 | `hinlink_opc-h69k` | 本工程使用。默认**锁定 2026-10-01 提交 `bfec801a`**（smallprogram 项目当日同款源码编译 H69K 成功）；可改 `lede_branch` 输入为 `master` 用最新 |
 | `openwrt/openwrt` (25.12 / main) | ❌ | — | 只有 `hinlink_h66k` / `hinlink_h68k` |
 | `immortalwrt/immortalwrt` | ❌ | — | 同上 |
 | iStoreOS | ✅ | `hinlink_opc-h6xk` | H66K/H68K/H69K 三合一 profile |
-| `smallprogram/OpenWrtAction` | ✅ | `hinlink_opc-h69k` | Lean 专用配置（本工程交叉核对过） |
+| `smallprogram/OpenWrtAction` | ✅ | `hinlink_opc-h69k` | Lean 专用配置（本工程交叉核对过；其 lede_dependence 依赖清单也已对齐） |
 
 LEDE 里的相关定义（已逐行核实）：
 
@@ -128,6 +128,7 @@ git push -u origin main
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
+| `lede_branch` | `bfec801a…` | 默认锁定 **2026-10-01 已验证提交**；填 `master` 用 LEDE 最新（可能有当日回归） |
 | `kernel` | `6.18` | rockchip 目标只支持 **6.18（默认）/ 6.12（测试）**；MT7916 建议 6.18 |
 | `rootfs_size_mb` | `4020` | rootfs 分区大小；32GB eMMC 可给到 `8192` |
 | `make_release` | `true` | 发布到 Release（需 `contents: write`，工作流已声明） |

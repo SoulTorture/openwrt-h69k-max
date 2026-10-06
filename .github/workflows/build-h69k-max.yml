@@ -1,15 +1,12 @@
 # =============================================================================
 # HINLINK H69K-MAX (RK3568) OpenWrt 云编译  —— GitHub Actions
 #
-# 源码: coolsnowwolf/lede (Lean) master
+# 源码: coolsnowwolf/lede (Lean), 默认锁定到 2026-10-01 已验证提交
 # 设备: rockchip/armv8 -> hinlink_opc-h69k  (DTS rk3568-opc-h69k)
 # U-Boot: generic-rk3568 (idbloader @0x40, u-boot.itb @0x4000)
 #
 # 用法: Actions -> "Build OpenWrt H69K-MAX" -> Run workflow
 # 产物: openwrt-*-rockchip-armv8-hinlink_opc-h69k-*.img.gz
-#
-# 说明: OpenWrt/LEDE 只能在 Linux 下编译 (大小写敏感文件系统 + POSIX 工具链),
-#       因此用 GitHub 的 Ubuntu runner 编译, 本机无需安装 Linux。
 # =============================================================================
 name: Build OpenWrt H69K-MAX
 
@@ -17,9 +14,9 @@ on:
   workflow_dispatch:
     inputs:
       lede_branch:
-        description: 'LEDE 分支'
+        description: 'LEDE 分支/提交 (默认锁定 2026-10-01 已验证版本, 填 master 可用最新)'
         required: true
-        default: 'master'
+        default: 'bfec801a42f344bb7566d1f4f8960fb0cdb08350'
         type: string
       kernel:
         description: '内核版本 (rockchip 目标仅支持 6.18 / 6.12)'
@@ -43,14 +40,14 @@ permissions:
 
 env:
   REPO_URL: https://github.com/coolsnowwolf/lede
-  REPO_BRANCH: ${{ github.event.inputs.lede_branch || 'master' }}
+  REPO_BRANCH: ${{ github.event.inputs.lede_branch || 'bfec801a42f344bb7566d1f4f8960fb0cdb08350' }}
   KERNEL: ${{ github.event.inputs.kernel || '6.18' }}
   ROOTFS_MB: ${{ github.event.inputs.rootfs_size_mb || '4020' }}
   DEVICE: hinlink_opc-h69k
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     name: Build H69K-MAX
     timeout-minutes: 350
 
@@ -66,31 +63,35 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
           sudo -E apt-get -qq update
-          # 核心依赖 (LEDE/OpenWrt 官方 buildbot 清单)
+          # 核心依赖 (对齐 smallprogram/OpenWrtAction 的 lede_dependence 清单,
+          # 其 H69K 构建在 LEDE 上持续成功; 关键差异: clang / python3-pyelftools
+          # (U-Boot binman 必需) / python3-setuptools)
           sudo -E apt-get -qq install -y --no-install-recommends \
-            autoconf automake autopoint binutils bison build-essential bzip2 \
-            ccache cmake cpio curl device-tree-compiler fastjar flex gawk \
-            gettext gcc-multilib g++-multilib git gperf haveged help2man \
-            intltool libc6-dev-i386 libelf-dev libglib2.0-dev libltdl-dev \
-            libmpc-dev libmpfr-dev libncurses-dev libreadline-dev libssl-dev \
-            libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
-            ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip \
-            python3-ply python3-docutils python3-pkg-resources qemu-utils \
-            re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
-            unzip vim wget xmlto xxd zlib1g-dev zstd
-          # 非关键/可能改名者, 失败不阻断
-          sudo -E apt-get -qq install -y --no-install-recommends \
-            ack antlr3 aria2 asciidoc lib32gcc-s1 libgmp3-dev libpython3-dev || true
+            ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison \
+            build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler \
+            fastjar flex gawk gcc-multilib g++-multilib genisoimage gettext git \
+            gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev \
+            libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev \
+            libncurses-dev libncurses5-dev libncursesw5-dev libnsl-dev libpython3-dev \
+            libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz \
+            msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip \
+            python3-ply python3-docutils python3-pkg-resources python3-pyelftools \
+            python3-setuptools qemu-utils re2c rsync scons squashfs-tools subversion \
+            swig texinfo uglifyjs unzip upx-ucl vim wget xmlto xxd xz-utils zlib1g-dev zstd \
+            || true
           sudo -E apt-get -qq autoremove --purge -y || true
           sudo -E apt-get -qq clean || true
           df -hT
 
-      - name: 克隆 LEDE 源码
+      - name: 克隆 LEDE 源码 (支持分支或提交 SHA)
         run: |
           set -e
           df -hT
-          git clone --depth 1 -b "$REPO_BRANCH" "$REPO_URL" openwrt
+          git init openwrt
           cd openwrt
+          git remote add origin "$REPO_URL"
+          git fetch --depth 1 origin "$REPO_BRANCH"
+          git checkout FETCH_HEAD
           echo "LEDE commit: $(git rev-parse HEAD)" | tee ../lede-commit.txt
           git log -1 --format='%H %ci %s' | tee -a ../lede-commit.txt
 
@@ -188,6 +189,15 @@ jobs:
             sudo rm -rf /usr/share/swift /usr/local/lib/node_modules /opt/pipx 2>/dev/null || true
           fi
 
+      - name: 预编译引导链 (verbose, 失败快速暴露)
+        working-directory: openwrt
+        run: |
+          set -o pipefail
+          make package/boot/rockchip-rkbin/compile V=sc -j1 2>&1 | tee rkbin-verbose.log
+          make package/boot/arm-trusted-firmware-rockchip/compile V=sc -j1 2>&1 | tee atf-verbose.log
+          make package/boot/uboot-rockchip/compile V=sc -j1 2>&1 | tee uboot-verbose.log
+          echo "引导链 (rkbin/ATF/U-Boot) 预编译完成"
+
       - name: 编译固件 (make -j)
         working-directory: openwrt
         run: |
@@ -228,6 +238,9 @@ jobs:
           path: |
             openwrt/build.log
             openwrt/.config
+            openwrt/uboot-verbose.log
+            openwrt/atf-verbose.log
+            openwrt/rkbin-verbose.log
           if-no-files-found: ignore
 
       - name: 发布到 Release
