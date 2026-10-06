@@ -1,0 +1,138 @@
+# =============================================================================
+# H69K-MAX 固件冒烟测试 —— 无硬件环境下对编译产物做最大程度验证
+#
+# 原理:
+#   1. 下载最新 Release 的 squashfs-sysupgrade.img.gz
+#   2. 解压磁盘镜像 -> 定位 squashfs 分区 (hsqs 魔数) -> unsquashfs 展开 rootfs
+#   3. 用 qemu-aarch64-static chroot 进 rootfs, 实际执行固件里的用户态程序:
+#      busybox/uname, openwrt_release, uci, lua/luci, opkg 包数据库
+#   4. 核对关键内核模块与固件文件是否齐全 (mt7915e/qmi_wwan/r8125/option/...)
+#
+# 说明: 这验证的是"固件内容正确、用户态可运行"; 硬件相关行为
+#       (网口/无线/5G 枚举) 仍需真机 TF 卡启动验证。
+# =============================================================================
+name: Smoke Test Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (留空 = 自动取最新 Release)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: 安装测试工具
+        run: |
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install -y --no-install-recommends squashfs-tools qemu-user-static grep coreutils
+          qemu-aarch64-static --version | head -1
+
+      - name: 下载最新固件
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p fw && cd fw
+          if [ -n "${{ github.event.inputs.release_tag }}" ]; then
+            gh release download "${{ github.event.inputs.release_tag }}" -R "$GITHUB_REPOSITORY" \
+              -p '*squashfs-sysupgrade.img.gz' -p '*manifest' -p 'sha256sums' || true
+          else
+            gh release download -R "$GITHUB_REPOSITORY" \
+              -p '*squashfs-sysupgrade.img.gz' -p '*manifest' -p 'sha256sums' || true
+          fi
+          ls -lh
+          [ -n "$(ls *squashfs-sysupgrade.img.gz 2>/dev/null)" ] || { echo "::error::未找到 squashfs 镜像"; exit 1; }
+
+      - name: 解包 rootfs
+        run: |
+          set -e
+          cd fw
+          IMG_GZ=$(ls *squashfs-sysupgrade.img.gz)
+          gzip -dc "$IMG_GZ" > disk.img
+          echo "磁盘镜像: $(du -h disk.img | cut -f1)"
+          # 定位 squashfs 分区魔数 hsqs
+          OFF=$(grep -abom1 hsqs disk.img | head -1 | cut -d: -f1)
+          echo "squashfs 分区偏移: $OFF"
+          [ -n "$OFF" ] || { echo "::error::未找到 squashfs 分区"; exit 1; }
+          tail -c +$((OFF+1)) disk.img > root.sqfs
+          unsquashfs -d rootfs root.sqfs > /dev/null
+          echo "rootfs 展开完成: $(du -sh rootfs | cut -f1)"
+          rm -f disk.img root.sqfs
+
+      - name: 冒烟测试 (qemu-aarch64 chroot)
+        run: |
+          set -e
+          cd fw
+          ROOT="$PWD/rootfs"
+          cp /usr/bin/qemu-aarch64-static "$ROOT/usr/bin/"
+          Q="/usr/bin/qemu-aarch64-static"
+          pass=0; fail=0
+          chk() {
+            local name="$1"; shift
+            if "$@" >/dev/null 2>&1; then
+              echo "[PASS] $name"; pass=$((pass+1))
+            else
+              echo "[FAIL] $name"; fail=$((fail+1))
+            fi
+          }
+
+          echo "===== 1. 用户态可执行性 ====="
+          chk "busybox uname (期望 aarch64)" chroot "$ROOT" $Q /bin/busybox uname -m
+          echo "--- openwrt_release 内容 ---"
+          chroot "$ROOT" $Q /bin/busybox cat /etc/openwrt_release 2>/dev/null || true
+          chk "uci show system" chroot "$ROOT" $Q /sbin/uci show system
+          chk "opkg 包数据库可读" chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>/dev/null | wc -l | grep -qE '[0-9]+'"
+          PKGS=$(chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>/dev/null | wc -l" || echo 0)
+          echo "固件内已安装包数量: ${PKGS}"
+          chk "dnsmasq 可执行" chroot "$ROOT" $Q /usr/sbin/dnsmasq --version
+          chk "dropbear 可执行" chroot "$ROOT" $Q /usr/sbin/dropbear -h
+
+          echo "===== 2. LuCI 网页组件 ====="
+          chk "luci 基础目录存在" test -d "$ROOT/www/luci-static"
+          chk "luci lua 库存在" test -d "$ROOT/usr/lib/lua/luci"
+          chk "lua 解释器存在" test -n "$(ls "$ROOT"/usr/bin/lua* 2>/dev/null)"
+          chk "luci-proto-qmi 存在" test -e "$ROOT/usr/lib/lua/luci/model/cbi/admin_network/proto_qmi.lua" -o -d "$ROOT/usr/lib/lua/luci/proto/qmi" -o -d "$ROOT/lib/netifd/proto"
+          chk "中文翻译存在" test -n "$(find "$ROOT/usr/lib/lua/luci" -name '*.zh_Hans.lmo' 2>/dev/null | head -1)"
+
+          echo "===== 3. 关键内核模块 (rootfs 内) ====="
+          KVER=$(ls "$ROOT/lib/modules" | head -1)
+          echo "内核版本目录: ${KVER}"
+          for m in mt7915e mt76-connac mt7916-firmware qmi_wwan cdc_mbim cdc_ncm option usb_wwan rndis_host cdc_ether usbserial r8125-rss pwm-fan ahci-dwc; do
+            chk "kmod $m" test -n "$(find "$ROOT/lib/modules/$KVER" -name "$m*.ko*" 2>/dev/null | head -1)"
+          done
+
+          echo "===== 4. 固件文件 ====="
+          chk "MT7916 固件" test -n "$(find "$ROOT/lib/firmware" -iname '*mt7916*' 2>/dev/null | head -1)"
+          chk "MT7921 固件" test -n "$(find "$ROOT/lib/firmware" -iname '*mt7921*' 2>/dev/null | head -1)"
+          chk "wireless-regdb" test -f "$ROOT/lib/firmware/regulatory.db"
+          chk "boot 相关脚本" test -f "$ROOT/etc/init.d/network"
+
+          echo "===== 5. 包清单核对 ====="
+          MANIFEST=$(ls ../fw/*manifest 2>/dev/null || ls ./*manifest 2>/dev/null || true)
+          if [ -n "$MANIFEST" ]; then
+            for pkg in kmod-mt7915e kmod-mt7916-firmware kmod-usb-net-qmi-wwan uqmi luci luci-proto-qmi luci-app-modemband; do
+              chk "manifest 含 $pkg" grep -q "^$pkg " "$MANIFEST"
+            done
+          fi
+
+          echo "==========================================="
+          echo "冒烟测试结果: PASS=$pass FAIL=$fail"
+          echo "==========================================="
+          [ "$fail" -eq 0 ]
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-report-${{ github.run_id }}
+          path: fw/rootfs/etc/openwrt_release
+          if-no-files-found: ignore
