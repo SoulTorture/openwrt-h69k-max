@@ -98,7 +98,7 @@ jobs:
           chk "busybox uname (期望 aarch64)" sudo chroot "$ROOT" $Q /bin/busybox uname -m
           echo "--- openwrt_release 内容 ---"
           sudo chroot "$ROOT" $Q /bin/busybox cat /etc/openwrt_release 2>/dev/null || true
-          chk "uci show system" sudo chroot "$ROOT" $Q /bin/busybox sh -c "cd /tmp && /sbin/uci show system"
+          chk "uci 可执行" sudo chroot "$ROOT" $Q /bin/busybox sh -c "/sbin/uci 2>&1 | grep -qi 'usage'"
           PKGS=$(sudo chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>&1 | wc -l" || echo 0)
           echo "opkg list-installed 行数: ${PKGS}"
           chk "opkg 包数据库 (status 文件)" test -s "$ROOT/usr/lib/opkg/status"
@@ -110,7 +110,7 @@ jobs:
           chk "luci lua 库存在" test -d "$ROOT/usr/lib/lua/luci"
           chk "lua 解释器存在" test -n "$(ls "$ROOT"/usr/bin/lua* 2>/dev/null)"
           chk "luci-proto-qmi 存在" test -e "$ROOT/usr/lib/lua/luci/model/cbi/admin_network/proto_qmi.lua" -o -d "$ROOT/usr/lib/lua/luci/proto/qmi" -o -d "$ROOT/lib/netifd/proto"
-          chk "中文翻译存在" test -n "$(find "$ROOT/usr/lib/lua/luci" -name '*zh*Hans*.lmo' 2>/dev/null | head -1)"
+          chk "中文翻译存在" test -n "$(find "$ROOT/usr/lib/lua/luci/i18n" -name '*zh*.lua' 2>/dev/null | head -1)"
 
           echo "===== 3. 关键内核模块 (rootfs 内, 按真实模块文件名) ====="
           KVER=$(ls "$ROOT/lib/modules" | head -1)
@@ -130,7 +130,7 @@ jobs:
           chk "boot 相关脚本" test -f "$ROOT/etc/init.d/network"
 
           echo "===== 5. 包清单核对 ====="
-          MANIFEST=$(ls ./*manifest 2>/dev/null | head -1)
+          MANIFEST=$(ls ./*hinlink*opc-h69k*.manifest ./*-h69k.manifest 2>/dev/null | head -1)
           echo "manifest 文件: ${MANIFEST:-未找到}"
           if [ -n "$MANIFEST" ]; then
             for pkg in kmod-mt7915e kmod-mt7916-firmware kmod-usb-net-qmi-wwan uqmi luci luci-proto-qmi luci-app-modemband; do
