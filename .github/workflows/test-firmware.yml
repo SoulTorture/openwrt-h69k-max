@@ -81,9 +81,12 @@ jobs:
           pass=0; fail=0
           chk() {
             local name="$1"; shift
-            local out
+            local out rc
+            set +e
             out=$("$@" 2>&1)
-            if [ $? -eq 0 ]; then
+            rc=$?
+            set -e
+            if [ $rc -eq 0 ]; then
               echo "[PASS] $name"; pass=$((pass+1))
             else
               echo "[FAIL] $name"; fail=$((fail+1))
