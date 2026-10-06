@@ -67,16 +67,17 @@ LEDE 里的相关定义（已逐行核实）：
 **同一块 PCB 搭配不同的 M.2 / mini-PCIe 模块**，模块在运行时枚举，
 设备树里没有对应的模块节点。所以 **一个固件三种 SKU 通用**。
 
-这也是本工程把 5G 的 **USB 与 PCIe 两条链路都编进去**的原因：
+这也是本工程把 5G 的 **USB 全模式链路编进去**的原因：
 
 - 设备树只使能了 `pcie2x1`（WiFi 槽）、`pcie3x1`/`pcie3x2`（两个 2.5G 网卡）、USB 控制器
-- RM520N-GL 到底从 M.2 座引出 USB 还是 PCIe/MHI，公开资料无法确定
-- 两条链路共存无冲突（内核只绑定实际存在的那条），避免刷完机拨不上号再返工
+- 按厂商硬件文档与拆机资料，M.2 5G 座引出的是 **USB 通道**（整机的 USB2.0 接口即 5G 模块）
+- RM520N-GL 的 USB 模式（QMI/MBIM/NCM/RNDIS）覆盖全部工作模式
+- 曾尝试同时编入 PCIe/MHI 链路（LEDE 自带的 Quectel 外置驱动 `pcie_mhi`），
+  **实测与内核 6.18 不兼容、编译失败**，且主线 MHI kmod 不存在于 LEDE——故移除
 
 | 链路 | 编入的驱动/工具 |
 |---|---|
 | USB（QMI/MBIM/NCM/RNDIS） | `kmod-usb-serial-option` `kmod-usb-serial-wwan` `kmod-usb-serial-qualcomm` `kmod-usb-net-qmi-wwan` `kmod-usb-net-cdc-mbim` `kmod-usb-net-cdc-ncm` `kmod-usb-net-rndis` `uqmi` `umbim` |
-| PCIe / MHI | `kmod-pcie_mhi`（LEDE 自带的 Quectel 官方 PCIe MHI 驱动） |
 | LuCI 界面 | `luci-proto-qmi` `luci-proto-mbim` `luci-proto-ncm` `luci-app-modemband` `luci-app-3ginfo-lite` `luci-app-sms-tool-js` `sms-tool` `picocom` |
 
 ---
@@ -88,7 +89,7 @@ openwrt-h69k-max/
 ├─ .github/workflows/build-h69k-max.yml   # 云编译工作流（核心）
 ├─ config/
 │  ├─ h69k-max.config                     # 设备/镜像/无线/风扇/网卡 配置
-│  └─ 5g-rm520n.config                     # RM520N-GL 5G 双栈配置
+│  └─ 5g-rm520n.config                     # RM520N-GL 5G USB 全模式配置
 ├─ scripts/build-cloud.ps1                # 一键推送 + 触发编译（Windows）
 └─ README.md
 ```

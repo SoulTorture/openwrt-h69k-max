@@ -243,7 +243,7 @@ jobs:
             - 内核: Linux ${{ github.event.inputs.kernel }}
             - rootfs 分区: ${{ github.event.inputs.rootfs_size_mb }} MB
             - 无线: MT7916 (mt7915e + mt7916-firmware)
-            - 5G: Quectel RM520N-GL (USB QMI/MBIM + PCIe MHI 双栈)
+            - 5G: Quectel RM520N-GL (USB QMI/MBIM/NCM/RNDIS 全模式)
             详见仓库 README 刷机说明。
           files: out/*
           fail_on_unmatched_files: false
