@@ -66,7 +66,8 @@ jobs:
           echo "squashfs 分区偏移: $OFF"
           [ -n "$OFF" ] || { echo "::error::未找到 squashfs 分区"; exit 1; }
           tail -c +$((OFF+1)) disk.img > root.sqfs
-          unsquashfs -d rootfs root.sqfs > /dev/null
+          sudo unsquashfs -d rootfs root.sqfs > /dev/null
+          sudo chown -R "$(id -u):$(id -g)" rootfs
           echo "rootfs 展开完成: $(du -sh rootfs | cut -f1)"
           rm -f disk.img root.sqfs
 
@@ -88,15 +89,15 @@ jobs:
           }
 
           echo "===== 1. 用户态可执行性 ====="
-          chk "busybox uname (期望 aarch64)" chroot "$ROOT" $Q /bin/busybox uname -m
+          chk "busybox uname (期望 aarch64)" sudo chroot "$ROOT" $Q /bin/busybox uname -m
           echo "--- openwrt_release 内容 ---"
-          chroot "$ROOT" $Q /bin/busybox cat /etc/openwrt_release 2>/dev/null || true
-          chk "uci show system" chroot "$ROOT" $Q /sbin/uci show system
-          chk "opkg 包数据库可读" chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>/dev/null | wc -l | grep -qE '[0-9]+'"
-          PKGS=$(chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>/dev/null | wc -l" || echo 0)
+          sudo chroot "$ROOT" $Q /bin/busybox cat /etc/openwrt_release 2>/dev/null || true
+          chk "uci show system" sudo chroot "$ROOT" $Q /sbin/uci show system
+          chk "opkg 包数据库可读" sudo chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>/dev/null | wc -l | grep -qE '[0-9]+'"
+          PKGS=$(sudo chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>/dev/null | wc -l" || echo 0)
           echo "固件内已安装包数量: ${PKGS}"
-          chk "dnsmasq 可执行" chroot "$ROOT" $Q /usr/sbin/dnsmasq --version
-          chk "dropbear 可执行" chroot "$ROOT" $Q /usr/sbin/dropbear -h
+          chk "dnsmasq 可执行" sudo chroot "$ROOT" $Q /usr/sbin/dnsmasq --version
+          chk "dropbear 可执行" sudo chroot "$ROOT" $Q /usr/sbin/dropbear -h
 
           echo "===== 2. LuCI 网页组件 ====="
           chk "luci 基础目录存在" test -d "$ROOT/www/luci-static"
