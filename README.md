@@ -147,11 +147,16 @@ GitHub runner 4 核，首次全量编译（含 U-Boot、内核、工具链）约
 
 编译完成后在 **Release** 或 **Actions → Artifacts** 下载：
 
+> ✅ **本次已编译并验证通过的固件**：
+> <https://github.com/SoulTorture/openwrt-h69k-max/releases/tag/h69k-max-37407644255>
+> 本地副本：`D:\AI\H69k\firmware-v1\`
+
 | 文件 | 用途 |
 |---|---|
-| `openwrt-<版本>-rockchip-armv8-hinlink_opc-h69k-squashfs-sysupgrade.img.gz` | **完整磁盘镜像**（含 U-Boot），用于写 eMMC / TF 卡 |
-| `*.manifest` | 固件内包清单，核对驱动是否齐全 |
-| `SHA256SUMS.txt` | 校验值，刷机前请核对 |
+| `openwrt-rockchip-armv8-hinlink_opc-h69k-squashfs-sysupgrade.img.gz` | **完整磁盘镜像**（含 U-Boot），用于写 eMMC / TF 卡（**推荐刷这个**） |
+| `openwrt-rockchip-armv8-hinlink_opc-h69k-ext4-sysupgrade.img.gz` | 同上的 ext4 rootfs 变体（可在线扩容） |
+| `openwrt-rockchip-armv8-hinlink_opc-h69k.manifest` | 固件内包清单（376 个包），核对驱动是否齐全 |
+| `SHA256SUMS.txt` / `sha256sums` | 校验值，刷机前请核对 |
 | `lede-commit.txt` | 本次编译对应的 LEDE commit，便于溯源 |
 
 `sha256sum` 校验（Windows）：
