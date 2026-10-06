@@ -57,7 +57,9 @@ jobs:
           set -e
           cd fw
           IMG_GZ=$(ls *squashfs-sysupgrade.img.gz)
-          gzip -dc "$IMG_GZ" > disk.img
+          # gzip 遇 sysupgrade 尾部附加数据会以退出码 2 告警, 属正常, 忽略之
+          gzip -dc "$IMG_GZ" > disk.img 2>/dev/null || true
+          [ -s disk.img ] || { echo "::error::解压失败"; exit 1; }
           echo "磁盘镜像: $(du -h disk.img | cut -f1)"
           # 定位 squashfs 分区魔数 hsqs
           OFF=$(grep -abom1 hsqs disk.img | head -1 | cut -d: -f1)
