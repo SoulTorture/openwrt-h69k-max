@@ -189,22 +189,19 @@ jobs:
             sudo rm -rf /usr/share/swift /usr/local/lib/node_modules /opt/pipx 2>/dev/null || true
           fi
 
-      - name: 预编译引导链 (verbose, 失败快速暴露)
-        working-directory: openwrt
-        run: |
-          set -o pipefail
-          make package/boot/rockchip-rkbin/compile V=sc -j1 2>&1 | tee rkbin-verbose.log
-          make package/boot/arm-trusted-firmware-rockchip/compile V=sc -j1 2>&1 | tee atf-verbose.log
-          make package/boot/uboot-rockchip/compile V=sc -j1 2>&1 | tee uboot-verbose.log
-          echo "引导链 (rkbin/ATF/U-Boot) 预编译完成"
-
-      - name: 编译固件 (make -j)
+      - name: 编译固件 (make -j, 失败时 verbose 重跑引导链)
         working-directory: openwrt
         run: |
           set -o pipefail
           make -j$(nproc) 2>&1 | tee build.log
           rc=${PIPESTATUS[0]}
           echo "编译结束, make 退出码: ${rc}"
+          if [ "$rc" -ne 0 ]; then
+            echo ":::: 主编译失败, verbose 重跑引导链收集真实错误 ::::"
+            make package/boot/rockchip-rkbin/compile V=sc -j1 2>&1 | tee rkbin-verbose.log || true
+            make package/boot/arm-trusted-firmware-rockchip/compile V=sc -j1 2>&1 | tee atf-verbose.log || true
+            make package/boot/uboot-rockchip/compile V=sc -j1 2>&1 | tee uboot-verbose.log || true
+          fi
           exit "${rc}"
 
       - name: 收集固件
