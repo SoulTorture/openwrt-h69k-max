@@ -81,10 +81,13 @@ jobs:
           pass=0; fail=0
           chk() {
             local name="$1"; shift
-            if "$@" >/dev/null 2>&1; then
+            local out
+            out=$("$@" 2>&1)
+            if [ $? -eq 0 ]; then
               echo "[PASS] $name"; pass=$((pass+1))
             else
               echo "[FAIL] $name"; fail=$((fail+1))
+              echo "       └─ 输出: $(echo "$out" | head -3 | tr '\n' ' ' | cut -c1-200)"
             fi
           }
 
@@ -92,11 +95,11 @@ jobs:
           chk "busybox uname (期望 aarch64)" sudo chroot "$ROOT" $Q /bin/busybox uname -m
           echo "--- openwrt_release 内容 ---"
           sudo chroot "$ROOT" $Q /bin/busybox cat /etc/openwrt_release 2>/dev/null || true
-          chk "uci show system" sudo chroot "$ROOT" $Q /sbin/uci show system
-          chk "opkg 包数据库可读" sudo chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>/dev/null | wc -l | grep -qE '[0-9]+'"
-          PKGS=$(sudo chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>/dev/null | wc -l" || echo 0)
-          echo "固件内已安装包数量: ${PKGS}"
-          chk "dnsmasq 可执行" sudo chroot "$ROOT" $Q /usr/sbin/dnsmasq --version
+          chk "uci show system" sudo chroot "$ROOT" $Q /bin/busybox sh -c "cd /tmp && /sbin/uci show system"
+          PKGS=$(sudo chroot "$ROOT" $Q /bin/busybox sh -c "/bin/opkg list-installed 2>&1 | wc -l" || echo 0)
+          echo "opkg list-installed 行数: ${PKGS}"
+          chk "opkg 包数据库 (status 文件)" test -s "$ROOT/usr/lib/opkg/status"
+          chk "dnsmasq 可执行" sudo chroot "$ROOT" $Q /bin/busybox sh -c "/usr/sbin/dnsmasq --version | head -1"
           chk "dropbear 可执行" sudo chroot "$ROOT" $Q /usr/sbin/dropbear -h
 
           echo "===== 2. LuCI 网页组件 ====="
@@ -104,23 +107,28 @@ jobs:
           chk "luci lua 库存在" test -d "$ROOT/usr/lib/lua/luci"
           chk "lua 解释器存在" test -n "$(ls "$ROOT"/usr/bin/lua* 2>/dev/null)"
           chk "luci-proto-qmi 存在" test -e "$ROOT/usr/lib/lua/luci/model/cbi/admin_network/proto_qmi.lua" -o -d "$ROOT/usr/lib/lua/luci/proto/qmi" -o -d "$ROOT/lib/netifd/proto"
-          chk "中文翻译存在" test -n "$(find "$ROOT/usr/lib/lua/luci" -name '*.zh_Hans.lmo' 2>/dev/null | head -1)"
+          chk "中文翻译存在" test -n "$(find "$ROOT/usr/lib/lua/luci" -name '*zh*Hans*.lmo' 2>/dev/null | head -1)"
 
-          echo "===== 3. 关键内核模块 (rootfs 内) ====="
+          echo "===== 3. 关键内核模块 (rootfs 内, 按真实模块文件名) ====="
           KVER=$(ls "$ROOT/lib/modules" | head -1)
           echo "内核版本目录: ${KVER}"
-          for m in mt7915e mt76-connac mt7916-firmware qmi_wwan cdc_mbim cdc_ncm option usb_wwan rndis_host cdc_ether usbserial r8125-rss pwm-fan ahci-dwc; do
+          for m in mt7915e mt76-connac qmi_wwan cdc_mbim cdc_ncm option usb_wwan rndis_host cdc_ether usbserial pwm-fan; do
             chk "kmod $m" test -n "$(find "$ROOT/lib/modules/$KVER" -name "$m*.ko*" 2>/dev/null | head -1)"
           done
+          chk "kmod r8125" test -n "$(find "$ROOT/lib/modules/$KVER" -iname 'r8125*.ko*' 2>/dev/null | head -1)"
+          chk "kmod ahci/dwc" test -n "$(find "$ROOT/lib/modules/$KVER" -iname '*ahci*.ko*' 2>/dev/null | head -1)"
+          echo "--- 实际模块文件抽样 (供人工核对) ---"
+          find "$ROOT/lib/modules/$KVER" -maxdepth 1 -name '*.ko*' | sed 's|.*/||' | sort | head -30
 
           echo "===== 4. 固件文件 ====="
           chk "MT7916 固件" test -n "$(find "$ROOT/lib/firmware" -iname '*mt7916*' 2>/dev/null | head -1)"
-          chk "MT7921 固件" test -n "$(find "$ROOT/lib/firmware" -iname '*mt7921*' 2>/dev/null | head -1)"
+          chk "MT7921/7961 固件" test -n "$(find "$ROOT/lib/firmware" \( -iname '*mt7921*' -o -iname 'WIFI_MT79*' -o -iname '*mt7961*' \) 2>/dev/null | head -1)"
           chk "wireless-regdb" test -f "$ROOT/lib/firmware/regulatory.db"
           chk "boot 相关脚本" test -f "$ROOT/etc/init.d/network"
 
           echo "===== 5. 包清单核对 ====="
-          MANIFEST=$(ls ../fw/*manifest 2>/dev/null || ls ./*manifest 2>/dev/null || true)
+          MANIFEST=$(ls ./*manifest 2>/dev/null | head -1)
+          echo "manifest 文件: ${MANIFEST:-未找到}"
           if [ -n "$MANIFEST" ]; then
             for pkg in kmod-mt7915e kmod-mt7916-firmware kmod-usb-net-qmi-wwan uqmi luci luci-proto-qmi luci-app-modemband; do
               chk "manifest 含 $pkg" grep -q "^$pkg " "$MANIFEST"
